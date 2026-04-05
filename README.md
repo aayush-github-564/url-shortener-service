@@ -113,9 +113,43 @@ This starts:
 
 ### 💻 Option 2: Run Locally
 
-Start PostgreSQL and Redis manually, update `application.properties`, then:
-```bash
-./mvnw spring-boot:run
+Prerequisites
+- Java 17
+- Docker Desktop
+ 
+Steps
+ 
+**1. Clone the repo:**
+```powershell
+git clone https://github.com/aayush-github-564/url-shortener-service.git
+cd url-shortener-service
+```
+ 
+**2. Start PostgreSQL and Redis:**
+```powershell
+docker compose up -d
+```
+ 
+**3. Run the app:**
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+ 
+**4. Test it:**
+```powershell
+# Shorten a URL
+Invoke-WebRequest -Uri "http://localhost:8080/api/urls" -Method POST -ContentType "application/json" -Body '{"longUrl": "https://www.github.com"}' -UseBasicParsing
+ 
+# Redirect (copy shortCode from above)
+Invoke-WebRequest -Uri "http://localhost:8080/r/{shortCode}" -Method GET -MaximumRedirection 0 -ErrorAction SilentlyContinue -UseBasicParsing
+ 
+# Analytics
+Invoke-WebRequest -Uri "http://localhost:8080/api/urls/{shortCode}/analytics" -Method GET -UseBasicParsing
+```
+ 
+**5. Run the benchmark:**
+```powershell
+.\benchmark.ps1
 ```
 
 ---
@@ -162,7 +196,51 @@ GET /api/analytics/{code}
   "clicksByDate": { "2025-01-01": 20, "2025-01-02": 35 }
 }
 ```
-
+---
+ 
+## Results and Output
+ 
+### Benchmark — Redis Cache vs PostgreSQL
+ 
+Script: `benchmark.ps1` at project root. Run while the app is live:
+```powershell
+.\benchmark.ps1
+```
+ 
+**Benchmark output:**
+ 
+![Benchmark results showing 94.7% latency reduction](docs/screenshots/benchmark-results.png)
+ 
+| Metric | Value |
+|---|---|
+| Cache MISS — PostgreSQL (cold start) | 576.34 ms |
+| Cache HIT avg — Redis | 30.8 ms |
+| Cache HIT min | 27.08 ms |
+| Cache HIT max | 35.03 ms |
+| **Latency reduction** | **94.7%** |
+ 
+> The 576ms cold-start figure includes JVM warmup and first-time connection pool initialisation.
+> Subsequent cache misses on a warm JVM settle around 40–80ms, giving a realistic ~60–65% improvement
+> over cached responses — the number stated conservatively on the resume.
+ 
+---
+ 
+### POST `/api/urls` — Shorten a URL
+ 
+![Shorten URL API response showing 201 Created with shortCode and shortUrl](docs/screenshots/post-shorten-url.png)
+ 
+---
+ 
+### GET `/api/urls/{shortCode}/analytics` — Analytics Response
+ 
+![Analytics API response showing totalClicks, clicksByCountry, clicksByDevice, clicksByBrowser](docs/screenshots/analytics-response.png)
+ 
+---
+ 
+### Docker Containers Running
+ 
+![docker ps output showing url-shortener-postgres and url-shortener-redis containers](docs/screenshots/docker-ps.png)
+ 
 ---
 
 ## 📊 Production Considerations Covered
@@ -181,7 +259,6 @@ GET /api/analytics/{code}
 - **Prometheus + Grafana** — real-time traffic dashboards
 - **User authentication** — per-account link management
 - **QR code generation** — for each short link
-- **Redis Cluster** — for high-availability caching
 
 ---
 
