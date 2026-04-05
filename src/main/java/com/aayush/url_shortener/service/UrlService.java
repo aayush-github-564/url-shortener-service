@@ -8,6 +8,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import com.aayush.url_shortener.dto.ClickAnalyticsResponse;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
@@ -173,7 +177,47 @@ public class UrlService {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 4. CUSTOM EXCEPTIONS (inner classes — keeps things self-contained for now)
+    // 4. ANALYTICS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Builds an analytics summary for a given short code.
+     * Groups clicks by country, device, and browser using Java streams.
+     */
+    public ClickAnalyticsResponse getAnalytics(String shortCode) {
+        Url url = urlRepository.findByShortCode(shortCode)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "No URL found for short code: " + shortCode
+                ));
+
+        List<Click> clicks = clickRepository.findByUrl(url);
+
+        // Group clicks by each dimension using streams
+        // e.g. {"IN": 30, "US": 12}
+        Map<String, Long> byCountry = clicks.stream()
+                .filter(c -> c.getCountry() != null)
+                .collect(Collectors.groupingBy(Click::getCountry, Collectors.counting()));
+
+        Map<String, Long> byDevice = clicks.stream()
+                .filter(c -> c.getDeviceType() != null)
+                .collect(Collectors.groupingBy(Click::getDeviceType, Collectors.counting()));
+
+        Map<String, Long> byBrowser = clicks.stream()
+                .filter(c -> c.getBrowser() != null)
+                .collect(Collectors.groupingBy(Click::getBrowser, Collectors.counting()));
+
+        return ClickAnalyticsResponse.builder()
+                .shortCode(shortCode)
+                .longUrl(url.getLongUrl())
+                .totalClicks(clicks.size())
+                .clicksByCountry(byCountry)
+                .clicksByDevice(byDevice)
+                .clicksByBrowser(byBrowser)
+                .build();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 5. CUSTOM EXCEPTIONS (inner classes — keeps things self-contained for now)
     // ─────────────────────────────────────────────────────────────────────────
 
     public static class ResourceNotFoundException extends RuntimeException {
